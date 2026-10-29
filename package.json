@@ -5,6 +5,8 @@
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
+    "compile": "node scripts/compile.cjs",
+    "deploy": "node scripts/deploy.cjs",
     "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
     "start": "tsx src/index.ts"
@@ -24,6 +26,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "solc": "^0.8.38",
     "tsx": "^4.23.13",
     "typescript": "^5.7.2"
   }
