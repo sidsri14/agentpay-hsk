@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Network](https://img.shields.io/badge/Network-HSK%20Chain%20(EVM)-emerald)](https://hsk.xyz)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/Tests-11%2F11%20Passing-brightgreen)](test/)
+[![Tests](https://img.shields.io/badge/Tests-12%2F12%20Passing-brightgreen)](test/)
 
 **AgentPay HSK** is a high-throughput, non-custodial Agent-to-Agent (A2A) payment and escrow protocol built natively for **HSK Chain** (Chain ID: 133). It empowers autonomous AI agents to contract, verify, and settle micro-transactions, programmatic task payouts, and **HashKey Merchant Payment Gateway (HSP)** orders without human mediation. Includes a full interactive Web HUD and REST API server.
 

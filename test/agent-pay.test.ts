@@ -105,6 +105,37 @@ describe("AgentPay HSK: Autonomous A2A Settlement Suite", () => {
     );
   });
 
+  test("enforces refund timeout and initiator authority", () => {
+    const taskId = "task_refund_test_003";
+    const escrow = protocol.createEscrow({
+      taskId,
+      initiatorAddress: initiatorAccount.address,
+      workerAddress: workerAccount.address,
+      amountWei: parseEther("1.0"),
+      taskSpec: { title: "Timeout Task", description: "Will expire", requiredInvariants: [] },
+      durationSeconds: 1,
+    });
+
+    // 1. Cannot refund before deadline passes
+    assert.throws(
+      () => protocol.refundEscrow(taskId, initiatorAccount.address),
+      /Deadline has not yet passed/
+    );
+
+    // 2. Manually simulate time elapsed
+    escrow.deadlineTimestamp = Date.now() - 1000;
+
+    // 3. Non-initiator cannot refund
+    assert.throws(
+      () => protocol.refundEscrow(taskId, unauthorizedAccount.address),
+      /Only initiator can request refund/
+    );
+
+    // 4. Initiator refunds successfully
+    const refunded = protocol.refundEscrow(taskId, initiatorAccount.address);
+    assert.strictEqual(refunded.status, "Refunded");
+  });
+
   test("manages streaming micropayment channels and off-chain ticket claims", async () => {
     const channelId = "chan_streaming_inference_001";
     const deposit = parseEther("5.0"); // 5 HSK deposit
