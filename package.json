@@ -1,0 +1,30 @@
+{
+  "name": "agentpay-hsk",
+  "version": "0.1.0",
+  "description": "Autonomous Agent-to-Agent (A2A) Settlement & Micropayment Protocol on HSK Chain",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "start": "tsx src/index.ts"
+  },
+  "keywords": [
+    "hsk-chain",
+    "ai-agents",
+    "a2a-settlement",
+    "agent-payments",
+    "smart-contracts",
+    "micropayments"
+  ],
+  "author": "Siddharth Srivastava <sidsri1502@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.23.13",
+    "typescript": "^5.7.2"
+  }
+}
