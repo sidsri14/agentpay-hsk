@@ -29,6 +29,9 @@ jobs:
     - name: Compile Smart Contracts
       run: npm run compile
 
+    - name: Smart Contract Deployment Dry-Run & Gas Audit
+      run: npm run deploy:dry-run
+
     - name: Typecheck TypeScript
       run: npm run typecheck
 
