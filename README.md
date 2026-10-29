@@ -3,11 +3,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Network](https://img.shields.io/badge/Network-HSK%20Chain%20(EVM)-emerald)](https://hsk.xyz)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/Tests-6%2F6%20Passing-brightgreen)](test/agent-pay.test.ts)
+[![Tests](https://img.shields.io/badge/Tests-10%2F10%20Passing-brightgreen)](test/)
 
-**AgentPay HSK** is a high-throughput, non-custodial Agent-to-Agent (A2A) payment and escrow protocol built natively for **HSK Chain** (Chain ID: 133). It empowers autonomous AI agents to contract, verify, and settle micro-transactions and programmatic task payouts without human mediation.
+**AgentPay HSK** is a high-throughput, non-custodial Agent-to-Agent (A2A) payment and escrow protocol built natively for **HSK Chain** (Chain ID: 133). It empowers autonomous AI agents to contract, verify, and settle micro-transactions, programmatic task payouts, and **HashKey Merchant Payment Gateway (HSP)** orders without human mediation.
 
-Designed for the **HSK Chain Horizon Hackathon** (Track 2: Agent Payments & A2A Settlement).
+Designed specifically for the **HSK Chain Horizon Hackathon** (Track 2: Agent Payments & A2A Settlement).
 
 ---
 
@@ -17,28 +17,37 @@ As autonomous multi-agent networks scale, agents must collaborate across boundar
 
 1. **High Latency & Gas Costs on Micro-calls**: Invoking an agent tool or LLM inference token-by-token cannot afford individual on-chain transactions.
 2. **Counterparty Risk**: Worker agents risk non-payment; hiring agents risk paying for unverified or failing code.
-3. **Lack of Cryptographic Invariant Verification**: Payment releases are rarely tied to deterministic cryptographic execution proofs.
+3. **Lack of Standardized Payment Mandates**: Agents lack standardized interfaces to negotiate price conditions, authorize payments via cryptographic signatures, and interface with compliant merchant payment gateways.
 
 ---
 
 ## The AgentPay Solution
 
-AgentPay solves this with a **dual-layer settlement architecture** implemented in Solidity 0.8.24 and Viem:
+AgentPay provides a **three-tier settlement architecture** natively integrated with HSK Chain and the HashKey Merchant Payment Gateway (HSP):
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
 │                        Autonomous Agent Network                        │
 │                                                                        │
 │   ┌─────────────────────┐                  ┌─────────────────────┐     │
-│   │   Initiator Agent   │                  │    Worker Agent     │     │
+│   │    Payer Agent      │                  │     Payee Agent     │     │
 │   │ (Task Dispatcher)   │                  │ (Code Auditor / LLM)│     │
 │   └──────────┬──────────┘                  └──────────▲──────────┘     │
 └──────────────┼────────────────────────────────────────┼────────────────┘
-               │                                        │                 
-       1. Lock Escrow / Channel                         │                 
-               │                                        │                 
-               ▼                                        │                 
+               │ 1. Transmit Payment Conditions / Invoice
+               │ 2. Construct & Sign HSP Cart Mandate   │
+               ▼                                        │
 ┌───────────────────────────────────────────────────────┴────────────────┐
+│             HashKey Merchant Payment Gateway (HSP) Interface           │
+│                                                                        │
+│   • Canonical JSON serializer & SHA-256 body hashing                   │
+│   • HMAC-SHA256 API request signing (X-App-Key, X-Signature, X-Nonce)  │
+│   • ES256K / EIP-191 Merchant Authorization signature                  │
+│   • POST /api/v1/merchant/orders gateway checkout synthesis            │
+└──────────────────────────────────────┬─────────────────────────────────┘
+                                       │
+                                       ▼
+┌────────────────────────────────────────────────────────────────────────┐
 │                         HSK Chain EVM (Chain ID: 133)                  │
 │                                                                        │
 │   ┌────────────────────────────────────────────────────────────────┐   │
@@ -53,19 +62,26 @@ AgentPay solves this with a **dual-layer settlement architecture** implemented i
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 1. Layer 1: Programmatic Task Escrow
+### 1. Layer 1: Programmatic Task Escrow (`contracts/AgentEscrow.sol`)
 - **Initiator locks native HSK** with a deterministic `taskSpecHash` (Keccak-256 hash of title, specification, and required code invariants).
 - **Worker executes task** and produces an immutable execution artifact (e.g. git commit hash or test suite digest).
-- **Initiator (or authorized guardrail agent) signs an EIP-191 settlement digest**:
+- **Initiator signs an EIP-191 settlement digest**:
   $$\text{digest} = \text{keccak256}(\text{taskId} \parallel \text{proofHash} \parallel \text{contractAddress})$$
 - The smart contract verifies the cryptographic signature via assembly `ecrecover` and atomically releases funds to the worker.
 
 ### 2. Layer 2: Off-Chain Streaming Micropayment Channels
-- For high-frequency A2A interactions (per-token LLM inference, API polling, continuous data feeds).
+- For high-frequency A2A interactions (per-token LLM inference, continuous tool calls).
 - Initiator opens a channel with a deposit in HSK.
 - Initiator signs off-chain cumulative balance tickets:
   $$\text{ticketDigest} = \text{keccak256}(\text{channelId} \parallel \text{cumulativeAmount} \parallel \text{contractAddress})$$
-- Worker can redeem the latest ticket on-chain at any time or upon channel expiration, withdrawing only the payment delta while unspent funds are safely returned.
+- Worker can redeem the latest ticket on-chain at any time, withdrawing only the payment delta while unspent funds are safely returned.
+
+### 3. Layer 3: HashKey Merchant (HSP) Gateway & Cart Mandate Adapter (`src/hsp-gateway.ts`)
+- Implements the exact official specification of the [HashKey Merchant API Documentation](https://hashkey-merchant.github.io/#/):
+  - **A2A Cart Mandate Construction**: Transforms raw agent invoices into valid `cart_mandate` objects with `method_data` (supporting x402 on HSK Chain ID 133, USDC, and USDT) and itemized `display_items`.
+  - **Canonical JSON Serialization**: Recursively sorts all keys alphabetically.
+  - **HMAC-SHA256 Request Signing**: Computes message digests using `"{METHOD}\n{PATH}\n{QUERY}\n{bodyHash}\n{timestamp}\n{nonce}"` for tamper-proof API communication.
+  - **Agent Wallet Authorization**: Payer Agent signs the canonical mandate digest with its private key (`merchant_authorization`).
 
 ---
 
@@ -74,13 +90,15 @@ AgentPay solves this with a **dual-layer settlement architecture** implemented i
 | Parameter | Value |
 | :--- | :--- |
 | **Target Network** | HSK Chain Testnet / Mainnet |
-| **Chain ID** | `133` (HSK Testnet) |
+| **Chain ID** | `133` |
 | **Native Currency** | HSK |
+| **Supported Stablecoins** | USDC, USDT (via HSP Gateway) |
 | **Testnet RPC** | `https://testnet.hsk.xyz` |
 | **Testnet Explorer** | `https://testnet-explorer.hskchain.net` |
+| **Gateway Endpoint** | `https://merchant-qa.hashkeymerchant.com` / `https://hsp.hashkey.com` |
 | **Smart Contract** | [`contracts/AgentEscrow.sol`](contracts/AgentEscrow.sol) (Solidity `^0.8.24`) |
 | **SDK & Test Client** | TypeScript 5.7, Viem 2.21, TSX |
-| **Signature Standard** | EIP-191 Personal Sign with EIP-55 Checksummed addresses |
+| **Signature Standards** | EIP-191 Personal Sign, HMAC-SHA256, Canonical JSON |
 
 ---
 
@@ -94,9 +112,12 @@ d:\agentpay-hsk\
 │   ├── types.ts                 # Type definitions & HSK network configuration
 │   ├── crypto.ts                # Deterministic hashing & EIP-191 signature utilities
 │   ├── client.ts                # AgentPayProtocol client SDK for autonomous agents
+│   ├── hsp-types.ts             # HashKey Merchant Gateway (HSP) Cart Mandate & API types
+│   ├── hsp-gateway.ts           # Canonical JSON, HMAC-SHA256 signing & A2A Mandate builder
 │   └── index.ts                 # CLI entry point & programmatic simulation
 ├── test/
-│   └── agent-pay.test.ts        # Node test runner suite with 6 comprehensive test cases
+│   ├── agent-pay.test.ts        # Programmatic escrow & streaming channel test suite
+│   └── hsp-gateway.test.ts      # HSP Cart Mandate & HMAC authentication test suite
 ├── package.json
 └── tsconfig.json
 ```
@@ -117,7 +138,7 @@ npm install
 ```
 
 ### Running Tests
-Run the comprehensive test suite verifying the cryptographic hashing, task escrow lifecycle, unauthorized signature rejection, and state channel streaming claims:
+Run the comprehensive 10-test suite verifying the cryptographic hashing, task escrow lifecycle, unauthorized signature rejection, state channel streaming claims, and HSP Cart Mandate HMAC signing:
 
 ```bash
 npm test
@@ -126,43 +147,24 @@ npm test
 Expected output:
 ```
 ▶ AgentPay HSK: Autonomous A2A Settlement Suite
-  ✔ computes deterministic task specification hash (1.9ms)
-  ✔ creates a valid task escrow locking native HSK (0.6ms)
-  ✔ rejects duplicate escrow creation for the same taskId (0.5ms)
-  ✔ settles escrow upon valid initiator signature on execution proof (9.2ms)
-  ✔ rejects escrow settlement with unauthorized agent signature (4.2ms)
-  ✔ manages streaming micropayment channels and off-chain ticket claims (9.3ms)
-✔ AgentPay HSK: Autonomous A2A Settlement Suite (27.9ms)
+  ✔ computes deterministic task specification hash (1.7ms)
+  ✔ creates a valid task escrow locking native HSK (0.9ms)
+  ✔ rejects duplicate escrow creation for the same taskId (0.9ms)
+  ✔ settles escrow upon valid initiator signature on execution proof (15.7ms)
+  ✔ rejects escrow settlement with unauthorized agent signature (6.1ms)
+  ✔ manages streaming micropayment channels and off-chain ticket claims (15.0ms)
+✔ AgentPay HSK: Autonomous A2A Settlement Suite (42.8ms)
+✔ HSP Gateway Suite: Canonical JSON formatting and deterministic SHA-256 body hash (2.0ms)
+✔ HSP Gateway Suite: HMAC-SHA256 request signing and verification (1.6ms)
+✔ HSP Gateway Suite: A2A Invoice conversion into valid HSP Cart Mandate (0.5ms)
+✔ HSP Gateway Suite: Agent wallet signs Cart Mandate and submits to Gateway (48.3ms)
+ℹ tests 10 | suites 1 | pass 10 | fail 0
 ```
 
 ### Running Simulation CLI
 ```bash
 npm start
 ```
-
----
-
-## Smart Contract Interface (`AgentEscrow.sol`)
-
-### Task Escrow Functions
-- `createEscrow(bytes32 taskId, address worker, bytes32 taskSpecHash, uint256 durationSeconds) external payable`
-- `settleEscrow(bytes32 taskId, bytes32 proofHash, bytes calldata signature) external`
-- `refundEscrow(bytes32 taskId) external`
-
-### Streaming Micropayment Functions
-- `openChannel(bytes32 channelId, address receiver, uint256 durationSeconds) external payable`
-- `claimMicropayment(bytes32 channelId, uint256 cumulativeAmount, bytes calldata signature) external`
-- `closeChannel(bytes32 channelId) external`
-
----
-
-## Real-World Use Case: Automated Solana Invariant Audit Escrow
-
-In `test/agent-pay.test.ts`, AgentPay simulates an autonomous hiring workflow:
-1. **Agent A (Supervisor)** creates an escrow for `task_hsk_perpetual_001` with specification `Bittern Labs Solana perpetual margin audit` requiring invariants `["i64_checked_abs", "u128_notional_math", "margin_ceiling"]`.
-2. **Agent B (Worker)** inspects the Rust program, writes the fix, and runs `cargo test` (17/17 passing).
-3. The proof hash `keccak256("17/17 cargo tests passed cleanly")` is submitted.
-4. Agent A verifies the test output, signs the release digest, and Agent B receives programmatic payout in HSK.
 
 ---
 
